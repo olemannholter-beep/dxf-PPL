@@ -1,0 +1,1065 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>DXF Sketch</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root{--bg:#1b1d22;--panel:#25282f;--panel2:#2d3139;--line:#3a3f49;--text:#d8dce3;--muted:#8b93a1;--acc:#2f81f7;}
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font:13px/1.35 "Segoe UI",system-ui,sans-serif;overflow:hidden;user-select:none}
+  #app{display:grid;height:100%;grid-template-columns:68px 1fr 230px;grid-template-rows:42px 1fr 34px}
+  header{grid-column:1/4;background:var(--panel);border-bottom:1px solid var(--line);display:flex;align-items:center;gap:6px;padding:0 8px}
+  header .sep{width:1px;height:22px;background:var(--line);margin:0 4px}
+  header .brand{font-weight:600;margin-right:8px;color:#fff}
+  button,select,input[type=text]{font:inherit;color:var(--text);background:var(--panel2);border:1px solid var(--line);border-radius:4px;padding:4px 9px}
+  button{cursor:pointer}
+  button:hover{background:#383d47}
+  button.primary{background:var(--acc);border-color:var(--acc);color:#fff}
+  button.primary:hover{background:#4a93ff}
+  #tools{background:var(--panel);border-right:1px solid var(--line);padding:6px;display:flex;flex-direction:column;gap:4px;overflow-y:auto}
+  .tool{display:flex;flex-direction:column;align-items:center;gap:1px;padding:5px 0 3px;font-size:10px;color:var(--muted);background:transparent;border:1px solid transparent}
+  .tool svg{width:24px;height:24px;stroke:var(--text);fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+  .tool.active{background:#1f3a63;border-color:var(--acc);color:#fff}
+  .tool:hover{background:#333843}
+  .tool.active:hover{background:#1f3a63}
+  main{position:relative;overflow:hidden;background:#1b1d22}
+  canvas{position:absolute;left:0;top:0;cursor:crosshair;display:block}
+  #toast{position:absolute;left:50%;top:12px;transform:translateX(-50%);background:#000c;border:1px solid var(--line);padding:6px 14px;border-radius:6px;opacity:0;transition:opacity .25s;pointer-events:none}
+  #toast.show{opacity:1}
+  #side{background:var(--panel);border-left:1px solid var(--line);overflow-y:auto;padding:8px;display:flex;flex-direction:column;gap:10px}
+  #side h3{margin:0 0 4px;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+  .lrow{display:flex;align-items:center;gap:6px;padding:3px 4px;border-radius:4px;cursor:pointer;border:1px solid transparent}
+  .lrow:hover{background:var(--panel2)}
+  .lrow.cur{background:#1f3a63;border-color:var(--acc)}
+  .lrow .nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .lrow .sw{width:16px;height:16px;border-radius:3px;border:1px solid #fff5;cursor:pointer}
+  .lrow .x{padding:0 6px;background:transparent;border:none;color:var(--muted)}
+  .lrow .x:hover{color:#ff6b6b}
+  .lrow input{margin:0}
+  #addlayer{display:flex;gap:4px;margin-top:6px}
+  #addlayer input{flex:1;min-width:0}
+  .muted{color:var(--muted)}
+  #selinfo div{margin:1px 0}
+  #selinfo select{width:100%;margin-top:4px}
+  footer{grid-column:1/4;background:var(--panel);border-top:1px solid var(--line);display:flex;align-items:center;gap:10px;padding:0 8px}
+  #prompt{flex:1;color:#ffd966;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  #cmd{width:190px;font-family:Consolas,monospace}
+  #coords{width:170px;font-family:Consolas,monospace;color:var(--muted);text-align:right}
+  .tg{padding:2px 8px;font-size:11px;color:var(--muted)}
+  .tg.on{background:#1f3a63;border-color:var(--acc);color:#fff}
+  #fname{width:120px}
+  kbd{background:var(--panel2);border:1px solid var(--line);border-radius:3px;padding:0 4px;font-size:11px}
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <span class="brand">&#9998; DXF Sketch</span>
+    <button id="bNew" title="New drawing">New</button>
+    <button id="bOpen" title="Import a DXF file (LINE, CIRCLE, ARC, POLYLINE)">Open DXF</button>
+    <input type="file" id="fileIn" accept=".dxf" hidden>
+    <span class="sep"></span>
+    <button id="bUndo" title="Undo (Ctrl+Z)">&#8630; Undo</button>
+    <button id="bRedo" title="Redo (Ctrl+Y)">&#8631; Redo</button>
+    <span class="sep"></span>
+    <button id="bFit" title="Zoom to fit (Home)">Zoom fit</button>
+    <span class="sep"></span>
+    <label class="muted">Units</label>
+    <select id="units"><option value="mm">mm</option><option value="in">inch</option></select>
+    <span style="flex:1"></span>
+    <input type="text" id="fname" value="drawing" title="File name">
+    <button id="bExport" class="primary" title="Export visible layers as DXF (Ctrl+S)">Export DXF</button>
+  </header>
+
+  <aside id="tools"></aside>
+
+  <main id="stage">
+    <canvas id="cv"></canvas>
+    <div id="toast"></div>
+  </main>
+
+  <aside id="side">
+    <section>
+      <h3>Layers</h3>
+      <div id="layers"></div>
+      <div id="addlayer"><input type="text" id="newLayer" placeholder="New layer name"><button id="bAddLayer">Add</button></div>
+      <div class="muted" style="margin-top:6px;font-size:11px">Click = make current &middot; dbl-click = rename &middot; swatch = colour &middot; checkbox = visible/exported</div>
+    </section>
+    <section>
+      <h3>Selection</h3>
+      <div id="selinfo"></div>
+    </section>
+    <section class="muted" style="font-size:11px;line-height:1.6">
+      <h3>Tips</h3>
+      Type coordinates in the box at the bottom:<br>
+      <kbd>10,20</kbd> absolute &nbsp; <kbd>@10,5</kbd> relative<br>
+      <kbd>@50&lt;30</kbd> length &lt; angle<br>
+      <kbd>25</kbd> length towards the cursor (radius for circles)<br>
+      <kbd>c</kbd> closes a polyline, <kbd>u</kbd> undoes last point<br>
+      Wheel = zoom, middle-drag / <kbd>Space</kbd>-drag = pan<br>
+      Right-click / <kbd>Enter</kbd> = finish, <kbd>Esc</kbd> = cancel
+    </section>
+  </aside>
+
+  <footer>
+    <span id="prompt"></span>
+    <input type="text" id="cmd" placeholder="x,y  @dx,dy  @len<ang  value" autocomplete="off" spellcheck="false">
+    <span id="coords">X 0.000  Y 0.000</span>
+    <button class="tg" id="tSnap" title="Object snap (F3)">OSNAP</button>
+    <button class="tg" id="tGsnap" title="Snap to grid (F4)">SNAP</button>
+    <button class="tg" id="tGrid" title="Show grid (F7)">GRID</button>
+    <button class="tg" id="tOrtho" title="Orthogonal mode (F8)">ORTHO</button>
+    <button class="tg" id="tDir" title="Show start point and direction of each object">DIR</button>
+  </footer>
+</div>
+
+<script>
+'use strict';
+/* ====================================================================
+   Constants / helpers
+   ==================================================================== */
+const TAU = Math.PI * 2, D2R = Math.PI / 180;
+const $ = id => document.getElementById(id);
+const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+const clone = o => JSON.parse(JSON.stringify(o));
+const norm = a => ((a % TAU) + TAU) % TAU;
+const angInArc = (a, a1, a2) => norm(a - a1) <= norm(a2 - a1) + 1e-12;
+
+// AutoCAD colour index (ACI) -> screen colour
+const ACI_HEX = {1:'#ff3b3b',2:'#ffe14d',3:'#4dff6a',4:'#33e0ff',5:'#5b8cff',6:'#ff4dff',7:'#ffffff',8:'#8a8a8a',9:'#c0c0c0',30:'#ff9a33'};
+const PALETTE = [7,1,2,3,4,5,6,30,8];
+const hex = aci => ACI_HEX[aci] || '#ffffff';
+
+const TOOLS = [
+  {id:'select', label:'Select', key:'v', icon:'<path d="M5 3l14 8-6 2 4 7-3 1-4-7-5 4z"/>'},
+  {id:'line',   label:'Line',   key:'l', icon:'<path d="M4 20L20 4"/><circle cx="4" cy="20" r="1.5"/><circle cx="20" cy="4" r="1.5"/>'},
+  {id:'poly',   label:'Polyline', key:'p', icon:'<path d="M3 18l5-10 6 8 7-11"/>'},
+  {id:'rect',   label:'Rectangle', key:'r', icon:'<rect x="4" y="6" width="16" height="12"/>'},
+  {id:'circle', label:'Circle', key:'c', icon:'<circle cx="12" cy="12" r="8"/>'},
+  {id:'arc',    label:'Arc',    key:'a', icon:'<path d="M4 18A9 9 0 0 1 20 18"/>'},
+  {id:'move',   label:'Move',   key:'m', icon:'<path d="M12 3v18M3 12h18M12 3l-3 3M12 3l3 3M12 21l-3-3M12 21l3-3M3 12l3-3M3 12l3 3M21 12l-3-3M21 12l-3 3"/>'},
+  {id:'copy',   label:'Copy',   key:'o', icon:'<rect x="8" y="8" width="12" height="12"/><path d="M4 16V4h12"/>'},
+  {id:'rotate', label:'Rotate', key:'t', icon:'<path d="M20 12a8 8 0 1 1-3-6.2M20 3v5h-5"/>'},
+  {id:'explode', label:'Explode', key:'x', icon:'<circle cx="6" cy="6" r="2"/><circle cx="18" cy="6" r="2"/><circle cx="12" cy="18" r="2"/>', action:true},
+  {id:'delete', label:'Delete', key:'', icon:'<path d="M5 7h14M9 7V4h6v3M7 7l1 13h8l1-13"/>', action:true},
+];
+
+/* ====================================================================
+   State
+   ==================================================================== */
+let S = {ents: [], layers: [{name:'0', aci:7, visible:true}], cur:'0', units:'mm', nid:1};
+let view = {s:4, px:0, py:0};              // px per unit, screen origin
+let tool = 'select', pts = [];
+let sel = new Set();
+let mouseS = {x:0, y:0}, curP = {x:0, y:0}, curSnap = null;
+let drag = null, spaceDown = false;
+let opt = {osnap:true, gsnap:true, grid:true, ortho:false, dirs:false};
+const undoStack = [], redoStack = [];
+
+const cv = $('cv'), ctx = cv.getContext('2d');
+let W = 0, H = 0, dpr = 1;
+
+/* ====================================================================
+   Persistence & history
+   ==================================================================== */
+function snapshot(){ return JSON.stringify({ents:S.ents, layers:S.layers, cur:S.cur, units:S.units, nid:S.nid}); }
+function pushUndo(){ undoStack.push(snapshot()); if (undoStack.length > 200) undoStack.shift(); redoStack.length = 0; }
+function restore(str){
+  Object.assign(S, JSON.parse(str));
+  sel = new Set([...sel].filter(id => S.ents.some(e => e.id === id)));
+  pts = []; refreshUI(); draw(); save();
+}
+function undo(){ if (!undoStack.length) return toast('Nothing to undo'); redoStack.push(snapshot()); restore(undoStack.pop()); }
+function redo(){ if (!redoStack.length) return toast('Nothing to redo'); undoStack.push(snapshot()); restore(redoStack.pop()); }
+function save(){ try { localStorage.setItem('dxfsketch', snapshot()); } catch(e){} }
+function load(){
+  try { const s = localStorage.getItem('dxfsketch'); if (s) Object.assign(S, JSON.parse(s)); } catch(e){}
+}
+
+/* ====================================================================
+   View transforms
+   ==================================================================== */
+const toScreen = (x, y) => [x * view.s + view.px, view.py - y * view.s];
+const toWorld  = (sx, sy) => [(sx - view.px) / view.s, (view.py - sy) / view.s];
+
+function resize(){
+  const r = $('stage').getBoundingClientRect();
+  dpr = window.devicePixelRatio || 1; W = r.width; H = r.height;
+  cv.width = Math.max(1, W * dpr); cv.height = Math.max(1, H * dpr);
+  cv.style.width = W + 'px'; cv.style.height = H + 'px';
+  draw();
+}
+
+function gridStep(){
+  return 1.0; // Strictly 1x1 millimeter grid
+}
+
+function layerMap(){ const m = {}; S.layers.forEach(l => m[l.name] = l); return m; }
+
+function visibleEnts(){ const lm = layerMap(); return S.ents.filter(e => lm[e.layer] && lm[e.layer].visible); }
+
+function zoomFit(){
+  const es = visibleEnts();
+  if (!es.length){ view.s = 4; view.px = W / 2; view.py = H / 2; return draw(); }
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  es.forEach(e => { const b = bbox(e); x0 = Math.min(x0,b[0]); y0 = Math.min(y0,b[1]); x1 = Math.max(x1,b[2]); y1 = Math.max(y1,b[3]); });
+  const bw = Math.max(x1 - x0, 1e-6), bh = Math.max(y1 - y0, 1e-6);
+  view.s = Math.min((W - 100) / bw, (H - 100) / bh);
+  if (!isFinite(view.s) || view.s > 1e5) view.s = 4;
+  view.px = W / 2 - (x0 + x1) / 2 * view.s;
+  view.py = H / 2 + (y0 + y1) / 2 * view.s;
+  draw();
+}
+
+/* ====================================================================
+   Geometry
+   ==================================================================== */
+function bbox(e){
+  switch (e.type){
+    case 'line':   return [Math.min(e.x1,e.x2), Math.min(e.y1,e.y2), Math.max(e.x1,e.x2), Math.max(e.y1,e.y2)];
+    case 'circle': return [e.cx-e.r, e.cy-e.r, e.cx+e.r, e.cy+e.r];
+    case 'arc': {
+      const xs = [e.cx + e.r*Math.cos(e.a1), e.cx + e.r*Math.cos(e.a2)];
+      const ys = [e.cy + e.r*Math.sin(e.a1), e.cy + e.r*Math.sin(e.a2)];
+      for (let k = 0; k < 4; k++){ const a = k*Math.PI/2; if (angInArc(a, e.a1, e.a2)){ xs.push(e.cx + e.r*Math.cos(a)); ys.push(e.cy + e.r*Math.sin(a)); } }
+      return [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)];
+    }
+    case 'poly': { const xs = e.pts.map(p=>p.x), ys = e.pts.map(p=>p.y); return [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)]; }
+  }
+}
+
+function distSeg(px, py, x1, y1, x2, y2){
+  const dx = x2-x1, dy = y2-y1, l2 = dx*dx + dy*dy;
+  let t = l2 ? ((px-x1)*dx + (py-y1)*dy) / l2 : 0; t = Math.max(0, Math.min(1, t));
+  return Math.hypot(px - (x1 + t*dx), py - (y1 + t*dy));
+}
+
+function distEnt(e, x, y){
+  switch (e.type){
+    case 'line': return distSeg(x, y, e.x1, e.y1, e.x2, e.y2);
+    case 'circle': return Math.abs(Math.hypot(x-e.cx, y-e.cy) - e.r);
+    case 'arc': {
+      const a = Math.atan2(y-e.cy, x-e.cx);
+      if (angInArc(a, e.a1, e.a2)) return Math.abs(Math.hypot(x-e.cx, y-e.cy) - e.r);
+      return Math.min(Math.hypot(x-(e.cx+e.r*Math.cos(e.a1)), y-(e.cy+e.r*Math.sin(e.a1))),
+                      Math.hypot(x-(e.cx+e.r*Math.cos(e.a2)), y-(e.cy+e.r*Math.sin(e.a2))));
+    }
+    case 'poly': {
+      let d = Infinity; const n = e.pts.length, m = e.closed ? n : n-1;
+      for (let i = 0; i < m; i++){ const p = e.pts[i], q = e.pts[(i+1)%n]; d = Math.min(d, distSeg(x, y, p.x, p.y, q.x, q.y)); }
+      return d;
+    }
+  }
+}
+
+function entLen(e){
+  switch (e.type){
+    case 'line': return Math.hypot(e.x2-e.x1, e.y2-e.y1);
+    case 'circle': return TAU * e.r;
+    case 'arc': return e.r * norm(e.a2 - e.a1);
+    case 'poly': { let L = 0; const n = e.pts.length, m = e.closed ? n : n-1; for (let i=0;i<m;i++) L += dist(e.pts[i], e.pts[(i+1)%n]); return L; }
+  }
+}
+
+function moveEnt(e, dx, dy){
+  switch (e.type){
+    case 'line': e.x1+=dx; e.y1+=dy; e.x2+=dx; e.y2+=dy; break;
+    case 'circle': case 'arc': e.cx+=dx; e.cy+=dy; break;
+    case 'poly': e.pts.forEach(p => { p.x+=dx; p.y+=dy; }); break;
+  }
+}
+function rotEnt(e, c, a){
+  const co = Math.cos(a), si = Math.sin(a);
+  const rp = (x, y) => [c.x + (x-c.x)*co - (y-c.y)*si, c.y + (x-c.x)*si + (y-c.y)*co];
+  switch (e.type){
+    case 'line': [e.x1, e.y1] = rp(e.x1, e.y1); [e.x2, e.y2] = rp(e.x2, e.y2); break;
+    case 'circle': [e.cx, e.cy] = rp(e.cx, e.cy); break;
+    case 'arc': [e.cx, e.cy] = rp(e.cx, e.cy); e.a1 += a; e.a2 += a; break;
+    case 'poly': e.pts.forEach(p => { [p.x, p.y] = rp(p.x, p.y); }); break;
+  }
+}
+
+// circle through 3 points -> CCW arc entity (null if collinear)
+function arc3(p1, p2, p3){
+  const ax=p1.x, ay=p1.y, bx=p2.x, by=p2.y, cx=p3.x, cy=p3.y;
+  const d = 2*(ax*(by-cy) + bx*(cy-ay) + cx*(ay-by));
+  if (Math.abs(d) < 1e-12) return null;
+  const a2_ = ax*ax+ay*ay, b2_ = bx*bx+by*by, c2_ = cx*cx+cy*cy;
+  const ux = (a2_*(by-cy) + b2_*(cy-ay) + c2_*(ay-by)) / d;
+  const uy = (a2_*(cx-bx) + b2_*(ax-cx) + c2_*(bx-ax)) / d;
+  const r = Math.hypot(ax-ux, ay-uy);
+  const a1 = Math.atan2(ay-uy, ax-ux), am = Math.atan2(by-uy, bx-ux), a3 = Math.atan2(cy-uy, cx-ux);
+  return norm(am - a1) <= norm(a3 - a1)
+    ? {type:'arc', cx:ux, cy:uy, r, a1, a2:a3}
+    : {type:'arc', cx:ux, cy:uy, r, a1:a3, a2:a1};
+}
+
+// DXF bulge segment -> CCW arc entity
+function bulgeArc(p, q, b){
+  if (b < 0) return bulgeArc(q, p, -b);
+  const th = 4*Math.atan(b), dx = q.x-p.x, dy = q.y-p.y, c = Math.hypot(dx, dy);
+  const r = c / (2*Math.sin(th/2)), h = r*Math.cos(th/2);
+  const cx = (p.x+q.x)/2 + (-dy/c)*h, cy = (p.y+q.y)/2 + (dx/c)*h;
+  return {type:'arc', cx, cy, r, a1:Math.atan2(p.y-cy, p.x-cx), a2:Math.atan2(q.y-cy, q.x-cx)};
+}
+
+function startInfo(e){
+  switch (e.type){
+    case 'line': return {x:e.x1, y:e.y1, a:Math.atan2(e.y2-e.y1, e.x2-e.x1)};
+    case 'circle': return {x:e.cx+e.r, y:e.cy, a:Math.PI/2};
+    case 'arc': return {x:e.cx+e.r*Math.cos(e.a1), y:e.cy+e.r*Math.sin(e.a1), a:e.a1+Math.PI/2};
+    case 'poly': return {x:e.pts[0].x, y:e.pts[0].y, a:Math.atan2(e.pts[1].y-e.pts[0].y, e.pts[1].x-e.pts[0].x)};
+  }
+}
+
+/* ====================================================================
+   Snapping
+   ==================================================================== */
+function snapCandidates(){
+  const c = [];
+  for (const e of visibleEnts()){
+    switch (e.type){
+      case 'line': c.push({x:e.x1,y:e.y1,t:'END'},{x:e.x2,y:e.y2,t:'END'},{x:(e.x1+e.x2)/2,y:(e.y1+e.y2)/2,t:'MID'}); break;
+      case 'circle': c.push({x:e.cx,y:e.cy,t:'CEN'},{x:e.cx+e.r,y:e.cy,t:'QUA'},{x:e.cx-e.r,y:e.cy,t:'QUA'},{x:e.cx,y:e.cy+e.r,t:'QUA'},{x:e.cx,y:e.cy-e.r,t:'QUA'}); break;
+      case 'arc': {
+        const am = e.a1 + norm(e.a2 - e.a1)/2;
+        c.push({x:e.cx,y:e.cy,t:'CEN'},
+               {x:e.cx+e.r*Math.cos(e.a1),y:e.cy+e.r*Math.sin(e.a1),t:'END'},
+               {x:e.cx+e.r*Math.cos(e.a2),y:e.cy+e.r*Math.sin(e.a2),t:'END'},
+               {x:e.cx+e.r*Math.cos(am),y:e.cy+e.r*Math.sin(am),t:'MID'}); break;
+      }
+      case 'poly': {
+        const n = e.pts.length, m = e.closed ? n : n-1;
+        e.pts.forEach(p => c.push({x:p.x,y:p.y,t:'END'}));
+        for (let i=0;i<m;i++){ const p=e.pts[i], q=e.pts[(i+1)%n]; c.push({x:(p.x+q.x)/2,y:(p.y+q.y)/2,t:'MID'}); }
+      }
+    }
+  }
+  return c;
+}
+
+function basePoint(){
+  if (!pts.length) return null;
+  if (['line','poly','rect','circle','arc'].includes(tool)) return pts[pts.length-1];
+  if (['move','copy','rotate'].includes(tool)) return pts[0];
+  return null;
+}
+
+function resolve(sx, sy){
+  const w = toWorld(sx, sy);
+  let p = {x:w[0], y:w[1]}, info = null;
+  if (opt.osnap){
+    let best = null, bd = 12;
+    for (const c of snapCandidates()){
+      const s = toScreen(c.x, c.y), d = Math.hypot(s[0]-sx, s[1]-sy);
+      if (d < bd){ bd = d; best = c; }
+    }
+    if (best) return {p:{x:best.x, y:best.y}, info:best.t};
+  }
+  if (opt.gsnap){ const g = gridStep(); p = {x:Math.round(p.x/g)*g, y:Math.round(p.y/g)*g}; }
+  const b = basePoint();
+  if (opt.ortho && b){ if (Math.abs(p.x-b.x) >= Math.abs(p.y-b.y)) p.y = b.y; else p.x = b.x; }
+  return {p, info:info};
+}
+
+/* ====================================================================
+   Drawing tools
+   ==================================================================== */
+function addEnt(e){ e.id = S.nid++; e.layer = S.cur; S.ents.push(e); return e; }
+const selEnts = () => S.ents.filter(e => sel.has(e.id));
+
+function setTool(t){
+  if (t === 'delete') return deleteSel();
+  if (t === 'explode') return explodeSel();
+  if (['move','copy','rotate'].includes(t) && !sel.size){
+    toast('Select objects first, then choose ' + t);
+    t = 'select';
+  }
+  tool = t; pts = [];
+  refreshTools(); updatePrompt(); draw();
+}
+
+function explodeSel(){
+  if (!sel.size) return toast('Select objects to explode');
+  let count = 0;
+  pushUndo();
+  const next = [];
+  S.ents.forEach(e => {
+    if (sel.has(e.id)){
+      if (e.type === 'poly'){
+        const n = e.pts.length, m = e.closed ? n : n - 1;
+        for (let i = 0; i < m; i++){
+          const p = e.pts[i], q = e.pts[(i + 1) % n];
+          if (!p.b){
+            next.push({ id: S.nid++, layer: e.layer, type: 'line', x1: p.x, y1: p.y, x2: q.x, y2: q.y });
+          } else {
+            const a = bulgeArc(p, q, p.b);
+            a.id = S.nid++; a.layer = e.layer;
+            next.push(a);
+          }
+        }
+        count++;
+      } else if (e.type === 'circle'){
+        next.push({ id: S.nid++, layer: e.layer, type: 'arc', cx: e.cx, cy: e.cy, r: e.r, a1: 0, a2: Math.PI });
+        next.push({ id: S.nid++, layer: e.layer, type: 'arc', cx: e.cx, cy: e.cy, r: e.r, a1: Math.PI, a2: 0 });
+        count++;
+      } else {
+        next.push(e);
+      }
+    } else {
+      next.push(e);
+    }
+  });
+  S.ents = next;
+  sel.clear();
+  save(); refreshSel(); draw();
+  toast(count > 0 ? 'Exploded into individual lines and arcs' : 'Selected items are already individual lines/arcs');
+}
+
+function cancel(){
+  if (pts.length){ pts = []; }
+  else if (tool !== 'select'){ tool = 'select'; refreshTools(); }
+  else { sel.clear(); refreshSel(); }
+  updatePrompt(); draw();
+}
+
+function finishPoly(close){
+  if (tool === 'poly' && pts.length >= 2){
+    pushUndo();
+    addEnt({type:'poly', pts:pts.map(p => ({x:p.x, y:p.y})), closed:!!close});
+    save(); refreshSel();
+  }
+  pts = []; updatePrompt(); draw();
+}
+
+function finish(){
+  if (tool === 'poly') finishPoly(false);
+  else if (pts.length){ pts = []; updatePrompt(); draw(); }
+}
+
+function applyMove(dx, dy, copy){
+  pushUndo();
+  if (copy){
+    const news = selEnts().map(e => { const c = clone(e); c.id = S.nid++; moveEnt(c, dx, dy); return c; });
+    S.ents.push(...news);
+  } else selEnts().forEach(e => moveEnt(e, dx, dy));
+  save();
+}
+function applyRotate(a){
+  pushUndo(); const c = pts[0];
+  selEnts().forEach(e => rotEnt(e, c, a));
+  save();
+}
+
+function addPoint(p){
+  switch (tool){
+    case 'line':
+      if (!pts.length) pts = [p];
+      else {
+        if (dist(pts[0], p) < 1e-9) return;
+        pushUndo(); addEnt({type:'line', x1:pts[0].x, y1:pts[0].y, x2:p.x, y2:p.y}); save();
+        pts = [p];
+      }
+      break;
+    case 'poly':
+      if (pts.length >= 3 && dist(p, pts[0]) < 1e-9){ finishPoly(true); return; }
+      if (pts.length && dist(pts[pts.length-1], p) < 1e-9) return;
+      pts.push(p); break;
+    case 'rect':
+      if (!pts.length) pts = [p];
+      else {
+        const a = pts[0];
+        if (Math.abs(p.x-a.x) < 1e-9 || Math.abs(p.y-a.y) < 1e-9) return toast('Rectangle has zero size');
+        pushUndo(); addEnt({type:'poly', closed:true, pts:[a, {x:p.x,y:a.y}, p, {x:a.x,y:p.y}].map(q => ({x:q.x,y:q.y}))}); save();
+        pts = [];
+      }
+      break;
+    case 'circle':
+      if (!pts.length) pts = [p];
+      else {
+        const r = dist(pts[0], p); if (r < 1e-9) return;
+        pushUndo(); addEnt({type:'circle', cx:pts[0].x, cy:pts[0].y, r}); save(); pts = [];
+      }
+      break;
+    case 'arc':
+      pts.push(p);
+      if (pts.length === 3){
+        const a = arc3(pts[0], pts[1], pts[2]);
+        if (!a){ toast('Points are collinear - cannot make an arc'); pts.pop(); }
+        else { pushUndo(); addEnt(a); save(); pts = []; }
+      }
+      break;
+    case 'move':
+    case 'copy':
+      if (!pts.length) pts = [p];
+      else {
+        applyMove(p.x - pts[0].x, p.y - pts[0].y, tool === 'copy');
+        if (tool === 'move'){ setTool('select'); } 
+      }
+      break;
+    case 'rotate':
+      if (!pts.length) pts = [p];
+      else { applyRotate(Math.atan2(p.y - pts[0].y, p.x - pts[0].x)); setTool('select'); }
+      break;
+  }
+  refreshSel(); updatePrompt(); draw();
+}
+
+function previewEnts(p){
+  const o = [];
+  switch (tool){
+    case 'line': if (pts.length) o.push({type:'line', x1:pts[0].x, y1:pts[0].y, x2:p.x, y2:p.y}); break;
+    case 'poly': if (pts.length) o.push({type:'poly', pts:[...pts, p], closed:false}); break;
+    case 'rect': if (pts.length){ const a = pts[0]; o.push({type:'poly', closed:true, pts:[a, {x:p.x,y:a.y}, p, {x:a.x,y:p.y}]}); } break;
+    case 'circle': if (pts.length) o.push({type:'circle', cx:pts[0].x, cy:pts[0].y, r:dist(pts[0], p)}); break;
+    case 'arc':
+      if (pts.length === 1) o.push({type:'line', x1:pts[0].x, y1:pts[0].y, x2:p.x, y2:p.y});
+      else if (pts.length === 2){
+        const a = arc3(pts[0], pts[1], p);
+        o.push(a || {type:'line', x1:pts[0].x, y1:pts[0].y, x2:p.x, y2:p.y});
+      }
+      break;
+    case 'move': case 'copy':
+      if (pts.length){ const dx = p.x-pts[0].x, dy = p.y-pts[0].y; selEnts().forEach(e => { const c = clone(e); moveEnt(c, dx, dy); o.push(c); }); o.push({type:'line', x1:pts[0].x, y1:pts[0].y, x2:p.x, y2:p.y, guide:true}); }
+      break;
+    case 'rotate':
+      if (pts.length){ const a = Math.atan2(p.y-pts[0].y, p.x-pts[0].x); selEnts().forEach(e => { const c = clone(e); rotEnt(c, pts[0], a); o.push(c); }); o.push({type:'line', x1:pts[0].x, y1:pts[0].y, x2:p.x, y2:p.y, guide:true}); }
+      break;
+  }
+  return o;
+}
+
+function infoText(p){
+  const u = S.units === 'mm' ? 'mm' : 'in', f = n => (+n.toFixed(3)).toString();
+  const b = basePoint();
+  switch (tool){
+    case 'line': case 'poly': if (b){ const a = Math.atan2(p.y-b.y, p.x-b.x)/D2R; return `L ${f(dist(b,p))} ${u}  \u2220 ${f((a+360)%360)}\u00b0`; } break;
+    case 'rect': if (b) return `${f(Math.abs(p.x-b.x))} \u00d7 ${f(Math.abs(p.y-b.y))} ${u}`; break;
+    case 'circle': if (b) return `R ${f(dist(b,p))}  \u00d8 ${f(2*dist(b,p))} ${u}`; break;
+    case 'arc': if (pts.length === 2){ const a = arc3(pts[0], pts[1], p); if (a) return `R ${f(a.r)} ${u}  sweep ${f(norm(a.a2-a.a1)/D2R)}\u00b0`; } break;
+    case 'move': case 'copy': if (b) return `\u0394 ${f(p.x-b.x)}, ${f(p.y-b.y)}`; break;
+    case 'rotate': if (b) return `\u2220 ${f(((Math.atan2(p.y-b.y,p.x-b.x)/D2R)+360)%360)}\u00b0`; break;
+  }
+  return '';
+}
+
+function numeric(n){
+  const b = basePoint();
+  if (tool === 'circle' && pts.length === 1){
+    if (n <= 0) return;
+    pushUndo(); addEnt({type:'circle', cx:pts[0].x, cy:pts[0].y, r:n}); save(); pts = [];
+    refreshSel(); updatePrompt(); draw(); return;
+  }
+  if (tool === 'rotate' && pts.length === 1){
+    applyRotate(n * D2R); setTool('select'); return;
+  }
+  if (!b) return toast('Pick a first point before typing a length');
+  let dx = curP.x - b.x, dy = curP.y - b.y; const l = Math.hypot(dx, dy);
+  if (l < 1e-9){ dx = 1; dy = 0; } else { dx /= l; dy /= l; }
+  if (tool === 'rect') addPoint({x:b.x + (dx >= 0 ? 1 : -1)*n, y:b.y + (dy >= 0 ? 1 : -1)*n});   // square
+  else addPoint({x:b.x + dx*n, y:b.y + dy*n});
+}
+
+function submitCmd(txt){
+  txt = txt.trim().toLowerCase();
+  if (!txt){ finish(); return; }
+  if (txt === 'c'){ if (tool === 'poly' && pts.length >= 3) finishPoly(true); else toast('Close needs a polyline with 3+ points'); return; }
+  if (txt === 'u'){ if (pts.length){ pts.pop(); updatePrompt(); draw(); } return; }
+  const base = basePoint() || {x:0, y:0}; let m;
+  const NUM = '(-?\\d*\\.?\\d+)';
+  if ((m = txt.match(new RegExp('^(@?)\\s*' + NUM + '\\s*[,;]\\s*' + NUM + '$')))){
+    const x = +m[2], y = +m[3];
+    return addPoint(m[1] ? {x:base.x + x, y:base.y + y} : {x, y});
+  }
+  if ((m = txt.match(new RegExp('^@?\\s*' + NUM + '\\s*<\\s*' + NUM + '$')))){
+    const l = +m[1], a = +m[2] * D2R;
+    return addPoint({x:base.x + l*Math.cos(a), y:base.y + l*Math.sin(a)});
+  }
+  if (new RegExp('^' + NUM + '$').test(txt)) return numeric(+txt);
+  toast('Could not understand "' + txt + '"');
+}
+
+/* ====================================================================
+   Selection / editing
+   ==================================================================== */
+function pickAt(sx, sy){
+  const w = toWorld(sx, sy), tol = 8 / view.s; let best = null, bd = tol;
+  for (const e of visibleEnts()){ const d = distEnt(e, w[0], w[1]); if (d < bd){ bd = d; best = e; } }
+  return best;
+}
+function boxSelect(x0, y0, x1, y1, add){
+  const a = toWorld(x0, y0), b = toWorld(x1, y1);
+  const minX = Math.min(a[0], b[0]), maxX = Math.max(a[0], b[0]), minY = Math.min(a[1], b[1]), maxY = Math.max(a[1], b[1]);
+  const window_ = x1 > x0;     // left->right = fully inside, right->left = crossing
+  if (!add) sel.clear();
+  for (const e of visibleEnts()){
+    const bb = bbox(e);
+    const inside = bb[0] >= minX && bb[2] <= maxX && bb[1] >= minY && bb[3] <= maxY;
+    const touch = !(bb[2] < minX || bb[0] > maxX || bb[3] < minY || bb[1] > maxY);
+    if (window_ ? inside : touch) sel.add(e.id);
+  }
+}
+function deleteSel(){
+  if (!sel.size) return toast('Nothing selected');
+  pushUndo(); S.ents = S.ents.filter(e => !sel.has(e.id)); sel.clear(); save(); refreshSel(); draw();
+}
+
+/* ====================================================================
+   Rendering
+   ==================================================================== */
+function pathEnt(e){
+  ctx.beginPath();
+  switch (e.type){
+    case 'line': { const a = toScreen(e.x1, e.y1), b = toScreen(e.x2, e.y2); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); break; }
+    case 'circle': { const c = toScreen(e.cx, e.cy); ctx.arc(c[0], c[1], e.r*view.s, 0, TAU); break; }
+    case 'arc': { const c = toScreen(e.cx, e.cy); ctx.arc(c[0], c[1], e.r*view.s, -e.a1, -e.a2, true); break; }
+    case 'poly': e.pts.forEach((p, i) => { const s = toScreen(p.x, p.y); i ? ctx.lineTo(s[0], s[1]) : ctx.moveTo(s[0], s[1]); }); if (e.closed) ctx.closePath(); break;
+  }
+}
+function strokeEnt(e, color, lw, dash){
+  pathEnt(e); ctx.strokeStyle = color; ctx.lineWidth = lw; ctx.setLineDash(dash || []); ctx.stroke(); ctx.setLineDash([]);
+}
+
+function drawGrid(){
+  const g = gridStep(), a = toWorld(0, H), b = toWorld(W, 0);
+  ctx.lineWidth = 1;
+  for (let i = Math.floor(a[0]/g); i*g <= b[0]; i++){
+    const x = Math.round(i*g*view.s + view.px) + .5;
+    ctx.strokeStyle = i % 5 === 0 ? '#323640' : '#262930'; ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke();
+  }
+  for (let j = Math.floor(a[1]/g); j*g <= b[1]; j++){
+    const y = Math.round(view.py - j*g*view.s) + .5;
+    ctx.strokeStyle = j % 5 === 0 ? '#323640' : '#262930'; ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+  }
+}
+
+function drawArrow(x, y, ang, len, color){
+  const ex = x + Math.cos(ang)*len, ey = y + Math.sin(ang)*len;
+  ctx.strokeStyle = color; ctx.fillStyle = color; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(ex, ey); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(ex, ey);
+  ctx.lineTo(ex - Math.cos(ang-.45)*7, ey - Math.sin(ang-.45)*7);
+  ctx.lineTo(ex - Math.cos(ang+.45)*7, ey - Math.sin(ang+.45)*7); ctx.closePath(); ctx.fill();
+}
+
+function drawSnapMarker(x, y, t){
+  ctx.strokeStyle = '#7CFC00'; ctx.lineWidth = 1.8; ctx.fillStyle = '#7CFC00';
+  ctx.beginPath();
+  if (t === 'END') ctx.rect(x-6, y-6, 12, 12);
+  else if (t === 'MID'){ ctx.moveTo(x, y-7); ctx.lineTo(x+7, y+6); ctx.lineTo(x-7, y+6); ctx.closePath(); }
+  else if (t === 'CEN') ctx.arc(x, y, 6, 0, TAU);
+  else { ctx.moveTo(x, y-7); ctx.lineTo(x+7, y); ctx.lineTo(x, y+7); ctx.lineTo(x-7, y); ctx.closePath(); }
+  ctx.stroke();
+  ctx.font = '11px Segoe UI'; ctx.fillText(t, x+10, y-8);
+}
+
+function draw(){
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.fillStyle = '#1b1d22'; ctx.fillRect(0, 0, W, H);
+  if (opt.grid) drawGrid();
+
+  // axes
+  const o = toScreen(0, 0);
+  ctx.lineWidth = 1;
+  ctx.strokeStyle = '#6b2b2b'; ctx.beginPath(); ctx.moveTo(0, o[1]+.5); ctx.lineTo(W, o[1]+.5); ctx.stroke();
+  ctx.strokeStyle = '#2b6b3a'; ctx.beginPath(); ctx.moveTo(o[0]+.5, 0); ctx.lineTo(o[0]+.5, H); ctx.stroke();
+
+  // entities
+  const lm = layerMap();
+  for (const e of S.ents){
+    const L = lm[e.layer]; if (!L || !L.visible) continue;
+    if (sel.has(e.id)) strokeEnt(e, '#00bfff', 2.6, [9, 5]);
+    else strokeEnt(e, hex(L.aci), 1.5);
+  }
+  if (opt.dirs){
+    for (const e of S.ents){
+      const L = lm[e.layer]; if (!L || !L.visible) continue;
+      const si = startInfo(e), s = toScreen(si.x, si.y);
+      ctx.fillStyle = '#4dff6a'; ctx.beginPath(); ctx.arc(s[0], s[1], 3.5, 0, TAU); ctx.fill();
+      drawArrow(s[0], s[1], -si.a, 16, '#4dff6a');
+    }
+  }
+
+  // preview
+  for (const e of previewEnts(curP)){
+    if (e.guide) strokeEnt(e, '#888', 1, [3, 4]);
+    else strokeEnt(e, '#ffd966', 1.5, [6, 4]);
+  }
+
+  // snap marker / crosshair
+  const cs = toScreen(curP.x, curP.y);
+  if (curSnap) drawSnapMarker(cs[0], cs[1], curSnap);
+  else if (tool !== 'select' || opt.gsnap){
+    ctx.strokeStyle = '#ffffff88'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(cs[0]-5, cs[1]); ctx.lineTo(cs[0]+5, cs[1]); ctx.moveTo(cs[0], cs[1]-5); ctx.lineTo(cs[0], cs[1]+5); ctx.stroke();
+  }
+
+  // dimension label
+  const txt = infoText(curP);
+  if (txt){
+    ctx.font = '12px Consolas, monospace'; const w = ctx.measureText(txt).width + 12;
+    const bx = Math.min(cs[0] + 16, W - w - 4), by = Math.max(cs[1] - 30, 4);
+    ctx.fillStyle = '#000c'; ctx.fillRect(bx, by, w, 20);
+    ctx.fillStyle = '#ffd966'; ctx.fillText(txt, bx + 6, by + 14);
+  }
+
+  // selection box
+  if (drag && drag.type === 'box'){
+    const x = Math.min(drag.x0, mouseS.x), y = Math.min(drag.y0, mouseS.y), w = Math.abs(mouseS.x - drag.x0), h = Math.abs(mouseS.y - drag.y0);
+    const win = mouseS.x > drag.x0;
+    ctx.fillStyle = win ? '#2f81f722' : '#3fb95022'; ctx.strokeStyle = win ? '#2f81f7' : '#3fb950';
+    ctx.setLineDash(win ? [] : [6, 4]); ctx.lineWidth = 1;
+    ctx.fillRect(x, y, w, h); ctx.strokeRect(x+.5, y+.5, w, h); ctx.setLineDash([]);
+  }
+}
+
+/* ====================================================================
+   UI
+   ==================================================================== */
+let toastTimer;
+function toast(msg){
+  const t = $('toast'); t.textContent = msg; t.classList.add('show');
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), 2600);
+}
+
+function updatePrompt(){
+  const n = pts.length; let s = '';
+  switch (tool){
+    case 'select': s = 'Click to select, drag a box (left\u2192right = inside, right\u2192left = touching). Shift adds. Del deletes.'; break;
+    case 'line': s = n ? 'LINE: next point (Enter / right-click to stop)' : 'LINE: first point'; break;
+    case 'poly': s = n ? `POLYLINE: next point (${n} so far) - Enter = finish, click first point or type C = close` : 'POLYLINE: first point'; break;
+    case 'rect': s = n ? 'RECTANGLE: opposite corner (or @width,height)' : 'RECTANGLE: first corner'; break;
+    case 'circle': s = n ? 'CIRCLE: radius - click a point or type a number' : 'CIRCLE: centre point'; break;
+    case 'arc': s = ['ARC: start point', 'ARC: second point (on the arc)', 'ARC: end point'][n]; break;
+    case 'move': s = n ? 'MOVE: destination (or @dx,dy)' : 'MOVE: base point'; break;
+    case 'copy': s = n ? 'COPY: destination (Esc to stop)' : 'COPY: base point'; break;
+    case 'rotate': s = n ? 'ROTATE: click direction or type angle in degrees' : 'ROTATE: centre of rotation'; break;
+  }
+  $('prompt').textContent = s;
+}
+
+function refreshTools(){
+  const box = $('tools');
+  if (!box.children.length){
+    TOOLS.forEach(t => {
+      const b = document.createElement('button'); b.className = 'tool'; b.dataset.id = t.id;
+      b.title = t.label + (t.key ? ' (' + t.key.toUpperCase() + ')' : ' (Del)');
+      b.innerHTML = `<svg viewBox="0 0 24 24">${t.icon}</svg><span>${t.label}</span>`;
+      b.onclick = () => setTool(t.id); box.appendChild(b);
+    });
+  }
+  [...box.children].forEach(b => b.classList.toggle('active', b.dataset.id === tool));
+}
+
+function refreshLayers(){
+  const box = $('layers'); box.innerHTML = '';
+  for (const L of S.layers){
+    const row = document.createElement('div'); row.className = 'lrow' + (L.name === S.cur ? ' cur' : '');
+    const vis = document.createElement('input'); vis.type = 'checkbox'; vis.checked = L.visible; vis.title = 'Visible / exported';
+    vis.onclick = ev => ev.stopPropagation();
+    vis.onchange = () => { L.visible = vis.checked; save(); draw(); };
+    const sw = document.createElement('span'); sw.className = 'sw'; sw.style.background = hex(L.aci); sw.title = 'Change colour';
+    sw.onclick = ev => { ev.stopPropagation(); pushUndo(); L.aci = PALETTE[(PALETTE.indexOf(L.aci) + 1) % PALETTE.length]; save(); refreshLayers(); draw(); };
+    const nm = document.createElement('span'); nm.className = 'nm'; nm.textContent = L.name;
+    row.onclick = () => { S.cur = L.name; save(); refreshLayers(); };
+    row.ondblclick = () => renameLayer(L);
+    row.append(vis, sw, nm);
+    if (L.name !== '0'){
+      const x = document.createElement('button'); x.className = 'x'; x.textContent = '\u00d7'; x.title = 'Delete layer (objects move to layer 0)';
+      x.onclick = ev => { ev.stopPropagation(); deleteLayer(L); }; row.append(x);
+    }
+    box.appendChild(row);
+  }
+}
+function cleanName(n){ return n.trim().replace(/[<>\/\\":;?*|=`']/g, '_'); }
+function addLayer(name){
+  name = cleanName(name); if (!name) return;
+  if (S.layers.some(l => l.name.toLowerCase() === name.toLowerCase())) return toast('Layer already exists');
+  pushUndo(); S.layers.push({name, aci:PALETTE[S.layers.length % PALETTE.length], visible:true}); S.cur = name;
+  save(); refreshUI();
+}
+function renameLayer(L){
+  if (L.name === '0') return toast('Layer 0 cannot be renamed');
+  const n = cleanName(prompt('Rename layer', L.name) || ''); if (!n || n === L.name) return;
+  if (S.layers.some(l => l.name.toLowerCase() === n.toLowerCase())) return toast('Layer already exists');
+  pushUndo(); S.ents.forEach(e => { if (e.layer === L.name) e.layer = n; }); if (S.cur === L.name) S.cur = n; L.name = n;
+  save(); refreshUI();
+}
+function deleteLayer(L){
+  pushUndo(); S.ents.forEach(e => { if (e.layer === L.name) e.layer = '0'; });
+  S.layers = S.layers.filter(l => l !== L); if (S.cur === L.name) S.cur = '0';
+  save(); refreshUI(); draw();
+}
+
+function refreshSel(){
+  const el = $('selinfo'), es = selEnts(), f = n => (+n.toFixed(4)).toString(), u = S.units === 'mm' ? 'mm' : 'in';
+  if (!es.length){ el.innerHTML = '<div class="muted">Nothing selected</div>'; return; }
+  let h = `<div><b>${es.length}</b> object${es.length > 1 ? 's' : ''} selected</div>`;
+  if (es.length === 1){
+    const e = es[0];
+    switch (e.type){
+      case 'line': h += `<div>Line &middot; length ${f(entLen(e))} ${u}</div><div class="muted">angle ${f(((Math.atan2(e.y2-e.y1, e.x2-e.x1)/D2R)+360)%360)}&deg;</div>`; break;
+      case 'circle': h += `<div>Circle &middot; R ${f(e.r)} / &Oslash; ${f(2*e.r)} ${u}</div><div class="muted">centre ${f(e.cx)}, ${f(e.cy)}</div>`; break;
+      case 'arc': h += `<div>Arc &middot; R ${f(e.r)} ${u}</div><div class="muted">sweep ${f(norm(e.a2-e.a1)/D2R)}&deg; &middot; length ${f(entLen(e))}</div><div class="muted">centre ${f(e.cx)}, ${f(e.cy)}</div>`; break;
+      case 'poly': h += `<div>Polyline &middot; ${e.closed ? 'closed' : 'open'}, ${e.pts.length} points</div><div class="muted">length ${f(entLen(e))} ${u}</div>`; break;
+    }
+  }
+  h += `<select id="selLayer"><option value="">Move to layer&hellip;</option>${S.layers.map(l => `<option>${l.name}</option>`).join('')}</select>`;
+  el.innerHTML = h;
+  $('selLayer').onchange = ev => {
+    const v = ev.target.value; if (!v) return;
+    pushUndo(); selEnts().forEach(e => e.layer = v); save(); draw(); refreshSel();
+  };
+}
+
+function refreshToggles(){
+  $('tSnap').classList.toggle('on', opt.osnap); $('tGsnap').classList.toggle('on', opt.gsnap);
+  $('tGrid').classList.toggle('on', opt.grid); $('tOrtho').classList.toggle('on', opt.ortho); $('tDir').classList.toggle('on', opt.dirs);
+}
+function refreshUI(){ refreshTools(); refreshLayers(); refreshSel(); refreshToggles(); updatePrompt(); $('units').value = S.units; }
+
+/* ====================================================================
+   DXF export (AutoCAD R12 ASCII - understood by virtually every CAM/CAD tool)
+   ==================================================================== */
+function toDXF(){
+  const out = [], w = (c, v) => { out.push(String(c)); out.push(String(v)); };
+  const f = n => String(+n.toFixed(6));
+  const lm = layerMap();
+  const ents = S.ents.filter(e => lm[e.layer] && lm[e.layer].visible);
+  const usedLayers = S.layers.filter(l => l.visible);
+
+  w(0,'SECTION'); w(2,'HEADER');
+  w(9,'$ACADVER'); w(1,'AC1009');
+  w(9,'$INSUNITS'); w(70, S.units === 'mm' ? 4 : 1);
+  w(9,'$MEASUREMENT'); w(70, S.units === 'mm' ? 1 : 0);
+  w(0,'ENDSEC');
+
+  w(0,'SECTION'); w(2,'TABLES');
+  w(0,'TABLE'); w(2,'LTYPE'); w(70,1);
+  w(0,'LTYPE'); w(2,'CONTINUOUS'); w(70,0); w(3,'Solid line'); w(72,65); w(73,0); w(40,0);
+  w(0,'ENDTAB');
+  w(0,'TABLE'); w(2,'LAYER'); w(70, usedLayers.length);
+  usedLayers.forEach(l => { w(0,'LAYER'); w(2,l.name); w(70,0); w(62,l.aci); w(6,'CONTINUOUS'); });
+  w(0,'ENDTAB');
+  w(0,'ENDSEC');
+
+  w(0,'SECTION'); w(2,'BLOCKS'); w(0,'ENDSEC');
+
+  w(0,'SECTION'); w(2,'ENTITIES');
+  for (const e of ents){
+    switch (e.type){
+      case 'line':
+        w(0,'LINE'); w(8,e.layer); w(10,f(e.x1)); w(20,f(e.y1)); w(30,0); w(11,f(e.x2)); w(21,f(e.y2)); w(31,0); break;
+      case 'circle':
+        w(0,'CIRCLE'); w(8,e.layer); w(10,f(e.cx)); w(20,f(e.cy)); w(30,0); w(40,f(e.r)); break;
+      case 'arc':
+        w(0,'ARC'); w(8,e.layer); w(10,f(e.cx)); w(20,f(e.cy)); w(30,0); w(40,f(e.r));
+        w(50,f(norm(e.a1)/D2R)); w(51,f(norm(e.a2)/D2R)); break;
+      case 'poly':
+        w(0,'POLYLINE'); w(8,e.layer); w(66,1); w(10,0); w(20,0); w(30,0); w(70, e.closed ? 1 : 0);
+        e.pts.forEach(p => { w(0,'VERTEX'); w(8,e.layer); w(10,f(p.x)); w(20,f(p.y)); w(30,0); });
+        w(0,'SEQEND'); w(8,e.layer); break;
+    }
+  }
+  w(0,'ENDSEC'); w(0,'EOF');
+  return { text: out.join('\r\n') + '\r\n', count: ents.length };
+}
+
+function exportDXF(){
+  const {text, count} = toDXF();
+  if (!count) return toast('Nothing to export (no objects on visible layers)');
+  const name = (cleanName($('fname').value) || 'drawing').replace(/\.dxf$/i, '') + '.dxf';
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([text], {type:'application/dxf'})); a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  toast(`Exported ${count} object${count > 1 ? 's' : ''} to ${name}`);
+}
+
+/* ====================================================================
+   DXF import
+   ==================================================================== */
+function parseDXF(text){
+  const lines = text.split(/\r?\n/), recs = []; let cur = null;
+  for (let i = 0; i + 1 < lines.length; i += 2){
+    const code = parseInt(lines[i].trim(), 10), val = lines[i+1].trim();
+    if (code === 0){ cur = {type:val, d:[]}; recs.push(cur); } else if (cur) cur.d.push([code, val]);
+  }
+  const ents = [], layers = {}, skipped = {}; let sec = '';
+  const pushVerts = (verts, closed, layer) => {
+    if (verts.length < 2) return;
+    if (!verts.some(v => v.b)){ ents.push({type:'poly', layer, closed, pts:verts.map(v => ({x:v.x, y:v.y}))}); return; }
+    const n = verts.length, m = closed ? n : n-1;
+    for (let k = 0; k < m; k++){
+      const p = verts[k], q = verts[(k+1)%n];
+      if (dist(p, q) < 1e-12) continue;
+      if (!p.b) ents.push({type:'line', layer, x1:p.x, y1:p.y, x2:q.x, y2:q.y});
+      else { const a = bulgeArc(p, q, p.b); a.layer = layer; ents.push(a); }
+    }
+  };
+  for (let i = 0; i < recs.length; i++){
+    const r = recs[i];
+    if (r.type === 'SECTION'){ const n = r.d.find(p => p[0] === 2); sec = n ? n[1] : ''; continue; }
+    if (r.type === 'ENDSEC'){ sec = ''; continue; }
+    const get = (c, def = 0) => { const p = r.d.find(p => p[0] === c); return p ? parseFloat(p[1]) : def; };
+    const str = (c, def = '') => { const p = r.d.find(p => p[0] === c); return p ? p[1] : def; };
+    if (sec === 'TABLES' && r.type === 'LAYER'){ layers[str(2, '0')] = Math.abs(get(62, 7)) || 7; continue; }
+    if (sec !== 'ENTITIES') continue;
+    const layer = str(8, '0');
+    switch (r.type){
+      case 'LINE': ents.push({type:'line', layer, x1:get(10), y1:get(20), x2:get(11), y2:get(21)}); break;
+      case 'CIRCLE': ents.push({type:'circle', layer, cx:get(10), cy:get(20), r:get(40)}); break;
+      case 'ARC': ents.push({type:'arc', layer, cx:get(10), cy:get(20), r:get(40), a1:get(50)*D2R, a2:get(51)*D2R}); break;
+      case 'LWPOLYLINE': {
+        const verts = [];
+        r.d.forEach(([c, v]) => {
+          if (c === 10) verts.push({x:parseFloat(v), y:0, b:0});
+          else if (c === 20 && verts.length) verts[verts.length-1].y = parseFloat(v);
+          else if (c === 42 && verts.length) verts[verts.length-1].b = parseFloat(v);
+        });
+        pushVerts(verts, (get(70) & 1) === 1, layer); break;
+      }
+      case 'POLYLINE': {
+        const flags = get(70), verts = []; let j = i + 1;
+        while (j < recs.length && recs[j].type === 'VERTEX'){
+          const vr = recs[j], g = c => { const p = vr.d.find(p => p[0] === c); return p ? parseFloat(p[1]) : 0; };
+          verts.push({x:g(10), y:g(20), b:g(42)});
+          j++;
+        }
+        i = (recs[j] && recs[j].type === 'SEQEND') ? j : j - 1;
+        if (!(flags & (16 | 64))) pushVerts(verts, (flags & 1) === 1, layer);
+        else skipped.POLYLINE = (skipped.POLYLINE || 0) + 1;
+        break;
+      }
+      default: skipped[r.type] = (skipped[r.type] || 0) + 1;
+    }
+  }
+  return {ents, layers, skipped};
+}
+
+function importDXF(text){
+  const {ents, layers, skipped} = parseDXF(text);
+  if (!ents.length) return toast('No supported objects found in that file');
+  pushUndo();
+  const layerNames = new Set(); ents.forEach(e => layerNames.add(e.layer));
+  S.ents = []; S.layers = [{name:'0', aci:7, visible:true}]; S.cur = '0'; S.nid = 1; sel.clear(); pts = [];
+  const ensure = n => { if (!S.layers.some(l => l.name === n)) S.layers.push({name:n, aci:layers[n] || 7, visible:true}); };
+  layerNames.forEach(ensure);
+  ents.forEach(e => { e.id = S.nid++; S.ents.push(e); });
+  save(); refreshUI(); zoomFit();
+  const sk = Object.entries(skipped).map(([k, v]) => `${v} ${k}`).join(', ');
+  toast(`Imported ${ents.length} objects` + (sk ? ` (skipped unsupported: ${sk})` : ''));
+}
+
+/* ====================================================================
+   Events
+   ==================================================================== */
+function canvasPos(ev){ const r = cv.getBoundingClientRect(); return {x:ev.clientX - r.left, y:ev.clientY - r.top}; }
+
+function updateMouse(ev){
+  mouseS = canvasPos(ev);
+  const r = resolve(mouseS.x, mouseS.y); curP = r.p; curSnap = r.info;
+  $('coords').textContent = `X ${curP.x.toFixed(3)}  Y ${curP.y.toFixed(3)}`;
+}
+
+cv.addEventListener('mousedown', ev => {
+  cv.focus(); updateMouse(ev);
+  if (ev.button === 1 || (ev.button === 0 && spaceDown)){
+    drag = {type:'pan', x:ev.clientX, y:ev.clientY, px:view.px, py:view.py}; ev.preventDefault(); return;
+  }
+  if (ev.button !== 0) return;
+  if (tool === 'select') drag = {type:'box', x0:mouseS.x, y0:mouseS.y, shift:ev.shiftKey};
+  else addPoint({x:curP.x, y:curP.y});
+});
+window.addEventListener('mousemove', ev => {
+  if (drag && drag.type === 'pan'){
+    view.px = drag.px + ev.clientX - drag.x; view.py = drag.py + ev.clientY - drag.y; draw(); return;
+  }
+  if (ev.target === cv || drag){ updateMouse(ev); draw(); }
+});
+window.addEventListener('mouseup', ev => {
+  if (!drag) return;
+  const d = drag; drag = null;
+  if (d.type === 'box'){
+    const p = canvasPos(ev);
+    if (Math.hypot(p.x - d.x0, p.y - d.y0) < 4){
+      const e = pickAt(p.x, p.y);
+      if (e){ if (d.shift && sel.has(e.id)) sel.delete(e.id); else { if (!d.shift) sel.clear(); sel.add(e.id); } }
+      else if (!d.shift) sel.clear();
+    } else boxSelect(d.x0, d.y0, p.x, p.y, d.shift);
+    refreshSel();
+  }
+  draw();
+});
+cv.addEventListener('contextmenu', ev => { ev.preventDefault(); if (pts.length) finish(); else if (tool !== 'select') cancel(); });
+cv.addEventListener('wheel', ev => {
+  ev.preventDefault(); const p = canvasPos(ev), w = toWorld(p.x, p.y);
+  view.s = Math.min(1e5, Math.max(1e-3, view.s * Math.exp(-ev.deltaY * 0.0015)));
+  view.px = p.x - w[0]*view.s; view.py = p.y + w[1]*view.s;
+  updateMouse(ev); draw();
+}, {passive:false});
+
+window.addEventListener('keydown', ev => {
+  const inCmd = ev.target === $('cmd'), tag = ev.target.tagName;
+  if (!inCmd && (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA')) return;
+  const ctrl = ev.ctrlKey || ev.metaKey, k = ev.key.toLowerCase();
+
+  if (ev.key === 'Escape'){ $('cmd').value = ''; $('cmd').blur(); cancel(); return; }
+  if (ev.key === 'Enter'){
+    ev.preventDefault();
+    if (inCmd){ const v = $('cmd').value; $('cmd').value = ''; submitCmd(v); } else finish();
+    return;
+  }
+  if (ctrl){
+    if (k === 'z' && !inCmd){ ev.preventDefault(); ev.shiftKey ? redo() : undo(); }
+    else if (k === 'y' && !inCmd){ ev.preventDefault(); redo(); }
+    else if (k === 'a' && !inCmd){ ev.preventDefault(); sel = new Set(visibleEnts().map(e => e.id)); refreshSel(); draw(); }
+    else if (k === 's'){ ev.preventDefault(); exportDXF(); }
+    return;
+  }
+  if (inCmd) return;
+  if (ev.key === ' '){ spaceDown = true; ev.preventDefault(); return; }
+  if (ev.key === 'Delete' || ev.key === 'Backspace'){ deleteSel(); return; }
+  if (ev.key === 'Home'){ zoomFit(); return; }
+  if (ev.key === 'F3'){ ev.preventDefault(); opt.osnap = !opt.osnap; refreshToggles(); return; }
+  if (ev.key === 'F4'){ ev.preventDefault(); opt.gsnap = !opt.gsnap; refreshToggles(); return; }
+  if (ev.key === 'F7'){ ev.preventDefault(); opt.grid = !opt.grid; refreshToggles(); draw(); return; }
+  if (ev.key === 'F8'){ ev.preventDefault(); opt.ortho = !opt.ortho; refreshToggles(); return; }
+  if (/^[0-9@\-.,<]$/.test(ev.key)){ $('cmd').focus(); return; }
+  const t = TOOLS.find(t => t.key && t.key === k);
+  if (t) setTool(t.id);
+});
+window.addEventListener('keyup', ev => { if (ev.key === ' ') spaceDown = false; });
+
+cv.tabIndex = 0;
+$('bNew').onclick = () => {
+  if (S.ents.length && !confirm('Start a new drawing? (You can still Undo)')) return;
+  pushUndo(); S.ents = []; S.layers = [{name:'0', aci:7, visible:true}]; S.cur = '0'; S.nid = 1; sel.clear(); pts = [];
+  save(); refreshUI(); zoomFit();
+};
+$('bOpen').onclick = () => $('fileIn').click();
+$('fileIn').onchange = ev => {
+  const file = ev.target.files[0]; if (!file) return;
+  if (S.ents.length && !confirm('Importing replaces the current drawing (you can Undo). Continue?')){ ev.target.value = ''; return; }
+  const rd = new FileReader();
+  rd.onload = () => { $('fname').value = file.name.replace(/\.dxf$/i, ''); importDXF(String(rd.result)); };
+  rd.readAsText(file); ev.target.value = '';
+};
+$('bUndo').onclick = undo; $('bRedo').onclick = redo; $('bFit').onclick = zoomFit; $('bExport').onclick = exportDXF;
+$('units').onchange = ev => { pushUndo(); S.units = ev.target.value; save(); draw(); refreshSel(); };
+$('bAddLayer').onclick = () => { addLayer($('newLayer').value); $('newLayer').value = ''; };
+$('newLayer').addEventListener('keydown', ev => { if (ev.key === 'Enter'){ addLayer(ev.target.value); ev.target.value = ''; } });
+$('tSnap').onclick = () => { opt.osnap = !opt.osnap; refreshToggles(); };
+$('tGsnap').onclick = () => { opt.gsnap = !opt.gsnap; refreshToggles(); };
+$('tGrid').onclick = () => { opt.grid = !opt.grid; refreshToggles(); draw(); };
+$('tOrtho').onclick = () => { opt.ortho = !opt.ortho; refreshToggles(); };
+$('tDir').onclick = () => { opt.dirs = !opt.dirs; refreshToggles(); draw(); };
+
+new ResizeObserver(resize).observe($('stage'));
+load(); refreshUI(); resize();
+view.px = W / 2; view.py = H / 2;
+if (S.ents.length) zoomFit(); else draw();
+</script>
+</body>
+</html>

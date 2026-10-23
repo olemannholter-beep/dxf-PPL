@@ -1,0 +1,6 @@
+node_modules/
+dist/
+.agents/
+.vscode/
+.idea/
+*.log
