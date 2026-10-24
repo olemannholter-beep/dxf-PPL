@@ -71,7 +71,8 @@
 
   function segsOf(e) {
     switch (e.type) {
-      case 'line': return [{ t: 'L', x1: e.x1, y1: e.y1, x2: e.x2, y2: e.y2 }];
+      case 'line':
+      case 'bend': return [{ t: 'L', x1: e.x1, y1: e.y1, x2: e.x2, y2: e.y2 }];
       case 'arc': return [{ t: 'A', cx: e.cx, cy: e.cy, r: e.r, a0: e.a1, a1: e.a2, ccw: true }];
       case 'circle': return [
         { t: 'A', cx: e.cx, cy: e.cy, r: e.r, a0: 0, a1: Math.PI, ccw: true },
@@ -180,7 +181,8 @@
   /* --------------------------------------------------------------- transforms */
   function mapPts(e, f) {
     switch (e.type) {
-      case 'line': { const a = f(e.x1, e.y1), b = f(e.x2, e.y2); e.x1 = a[0]; e.y1 = a[1]; e.x2 = b[0]; e.y2 = b[1]; break; }
+      case 'line':
+      case 'bend': { const a = f(e.x1, e.y1), b = f(e.x2, e.y2); e.x1 = a[0]; e.y1 = a[1]; e.x2 = b[0]; e.y2 = b[1]; break; }
       case 'circle': case 'arc': { const c = f(e.cx, e.cy); e.cx = c[0]; e.cy = c[1]; break; }
       case 'poly': e.pts.forEach(p => { const q = f(p.x, p.y); p.x = q[0]; p.y = q[1]; }); break;
     }
@@ -299,10 +301,14 @@
     const pieces = trimSeg(segs[k], p, cutterSegs.concat(others));
     if (e.type !== 'poly' && !pieces.length && !cutterSegs.some(c => intersect(segs[k], c, false, false).length)) return null;
     if (e.type === 'poly' && segs.length > 1 && !pieces.length && !cutterSegs.concat(others).some(c => c !== segs[k] && intersect(segs[k], c, false, false).length)) return null;
-    return { add: others.map(s => entFromSegs([s], false)).concat(pieces.map(s => entFromSegs([s], false))) };
+    const addEnts = others.map(s => entFromSegs([s], false)).concat(pieces.map(s => entFromSegs([s], false)));
+    if (e.type === 'bend') {
+      return { add: addEnts.map(ent => Object.assign({}, e, { x1: ent.x1, y1: ent.y1, x2: ent.x2, y2: ent.y2 })) };
+    }
+    return { add: addEnts };
   }
   function extendEntity(e, p, boundSegs) {
-    if (e.type === 'line') {
+    if (e.type === 'line' || e.type === 'bend') {
       const s = segsOf(e)[0], atEnd = Math.hypot(p.x - s.x2, p.y - s.y2) < Math.hypot(p.x - s.x1, p.y - s.y1);
       const dx = s.x2 - s.x1, dy = s.y2 - s.y1, l2 = dx * dx + dy * dy; let best = null;
       for (const b of boundSegs) for (const ip of intersect(s, b, true, false)) {
@@ -441,14 +447,18 @@
     const sg = sideOf(e, sidePt), closed = e.type === 'poly' && e.closed;
     const segs = offsetSegs(segsOf(e), closed, sg * d);
     if (!segs.length) return null;
-    return entFromSegs(segs, closed);
+    const res = entFromSegs(segs, closed);
+    if (e.type === 'bend' && res.type === 'line') {
+      return Object.assign({}, e, { x1: res.x1, y1: res.y1, x2: res.x2, y2: res.y2 });
+    }
+    return res;
   }
 
   /* --------------------------------------------------- join / explode / cleanup */
   function joinEntities(ents, tol) {
     const items = [];
     ents.forEach(e => {
-      if (e.type === 'circle' || (e.type === 'poly' && e.closed)) return;
+      if (e.type === 'circle' || (e.type === 'poly' && e.closed) || e.type === 'bend') return;
       segsOf(e).forEach(s => items.push({ s, id: e.id, used: false }));
     });
     const result = [];
@@ -499,7 +509,7 @@
     return null;
   }
   function reverseEntity(e) {
-    if (e.type === 'line') return Object.assign({}, e, { x1: e.x2, y1: e.y2, x2: e.x1, y2: e.y1 });
+    if (e.type === 'line' || e.type === 'bend') return Object.assign({}, e, { x1: e.x2, y1: e.y2, x2: e.x1, y2: e.y1 });
     if (e.type === 'arc' || e.type === 'circle') {
       const segs = e.type === 'arc' ? segsOf(e) : segsOf(e);
       const rev = segs.map(segReverse).reverse();
@@ -518,6 +528,7 @@
   }
   // make the contour begin at the point nearest to p (inserting a vertex if needed)
   function setStartPoint(e, p, snapTol) {
+    if (e.type === 'bend') return e;
     if (e.type === 'line') return dist(p, { x: e.x1, y: e.y1 }) <= dist(p, { x: e.x2, y: e.y2 }) ? e : reverseEntity(e);
     if (e.type === 'arc') return e;
     let segs = segsOf(e);
@@ -537,14 +548,15 @@
     const q = v => Math.round(v / tol);
     const sig = e => {
       switch (e.type) {
-        case 'line': { const a = [q(e.x1), q(e.y1)], b = [q(e.x2), q(e.y2)]; return 'L' + (a < b ? a + '|' + b : b + '|' + a); }
+        case 'line':
+        case 'bend': { const a = [q(e.x1), q(e.y1)], b = [q(e.x2), q(e.y2)]; return (e.type === 'bend' ? 'B' : 'L') + (a < b ? a + '|' + b : b + '|' + a); }
         case 'circle': return 'C' + [q(e.cx), q(e.cy), q(e.r)];
         case 'arc': return 'A' + [q(e.cx), q(e.cy), q(e.r), q(norm(e.a1) * e.r), q(norm(e.a2) * e.r)];
         case 'poly': { const a = e.pts.map(p => q(p.x) + ',' + q(p.y)); const f = a.join(';'), r = a.slice().reverse().join(';'); return 'P' + e.closed + (f < r ? f : r); }
       }
     };
     for (const e of ents) {
-      const tiny = (e.type === 'line' && Math.hypot(e.x2 - e.x1, e.y2 - e.y1) < tol) || ((e.type === 'circle' || e.type === 'arc') && e.r < tol) ||
+      const tiny = ((e.type === 'line' || e.type === 'bend') && Math.hypot(e.x2 - e.x1, e.y2 - e.y1) < tol) || ((e.type === 'circle' || e.type === 'arc') && e.r < tol) ||
         (e.type === 'poly' && (e.pts.length < 2 || entLen(e) < tol));
       const s = sig(e);
       if (tiny || seen.has(s)) removed.push(e.id); else { seen.add(s); keep.push(e); }
@@ -555,6 +567,7 @@
   function openEnds(ents, tol) {
     const pts = [];
     ents.forEach(e => {
+      if (e.type === 'bend') return;
       if (isClosed(e)) return;
       const segs = segsOf(e); if (!segs.length) return;
       pts.push(segStart(segs[0]), segEnd(segs[segs.length - 1]));

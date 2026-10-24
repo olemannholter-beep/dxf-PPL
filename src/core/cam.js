@@ -95,9 +95,9 @@
       curPos = Geo.segEnd(segs[segs.length - 1]);
     }
 
-    // Add any open contours at the end
+    // Add any open contours at the end (excluding bend lines, which are press brake lines, not cuts)
     const closedSet = new Set(closedEntities(ents).map(e => e.id));
-    ents.filter(e => !closedSet.has(e.id)).forEach(e => {
+    ents.filter(e => !closedSet.has(e.id) && e.type !== 'bend').forEach(e => {
       ordered.push({ ent: e, isInner: false, depth: 0, area: 0 });
     });
 

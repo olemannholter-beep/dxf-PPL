@@ -8,20 +8,29 @@ A 2D Computer-Aided Design (CAD) and Computer-Aided Manufacturing (CAM) desktop 
 
 ```
 dxf/
-├── package.json              # Electron & electron-builder packaging config
-├── README.md                 # Documentation & build guide
+├── package.json              # Cross-platform scripts & electron-builder packaging config
+├── vite.config.js            # Vite bundler & HMR dev server configuration
+├── legacy/
+│   └── index.html            # Archived legacy prototype
 ├── src/
 │   ├── main/
-│   │   ├── main.js           # Electron main process (lifecycle, native file dialogs, IPC)
+│   │   ├── main.js           # Electron main process (lifecycle, dev-server/dist loading, IPC)
 │   │   └── preload.js        # Secure ContextBridge IPC API
 │   ├── core/
 │   │   ├── geometry.js       # 2D CAD Geometry Kernel (Trim, Extend, Fillet, Offset, Join...)
 │   │   ├── dxf.js            # AutoCAD R12 ASCII DXF Exporter & Importer
-│   │   └── cam.js            # IGEMS CAM Engine (Nesting, Inner/Outer, Leads, Sequencing)
+│   │   ├── cam.js            # IGEMS CAM Engine (Nesting, Inner/Outer, Leads, Sequencing)
+│   │   ├── parts.js          # Parametric standard part generator library
+│   │   └── sheetmetal.js     # Sheet metal bend deduction engine & flat blank unfolding
 │   └── renderer/
-│       ├── index.html        # Desktop Application Window & Ribbon UI
+│       ├── index.html        # Modern HTML5 desktop window entry (ES module)
 │       ├── style.css         # Dark CAD Workbench theme
-│       └── app.js            # Canvas rendering, Osnap engine, interactive tool controllers
+│       ├── main.js           # Application entry orchestrator
+│       ├── viewport.js       # Canvas rendering loop, 1x1mm grid, coordinate transforms
+│       ├── snap.js           # OSNAP engine (END, MID, CEN, QUA) & 1mm grid snapping
+│       ├── state.js          # Centralized reactive state & Undo/Redo stack
+│       ├── tools/            # Modular CAD/CAM drawing & modification tools
+│       └── ui/               # Modal controllers, HUD popovers, sidebar inspectors
 ```
 
 ---
@@ -98,6 +107,20 @@ Access via the **Smart Dim** button in the ribbon or by pressing the **`D`** key
 - **Explode (`X`)**: Instantly explodes selected parts, polylines, bulged contours, and circles back into individual pure lines and arcs.
 - **Join (`J`)**: The exact reverse of Explode. Select touching individual lines and arcs, press **`J`** (or click **Join** in the ribbon or inspector), and they automatically merge into a single continuous unified part (polyline with arc bulges). Automatically detects closed loops vs. open chains.
 - **Manual Input HUD**: Click left mouse button when drawing rectangles/squares or press the "Dimensions" button in the ribbon to open the HUD dialog to enter exact width and height numbers with locked square ratio.
+
+### 8. Sheet Metal Bends, K-Factor Compensation & Flat Pattern Unfolding
+Access via the **Sheet Metal** ribbon tab or press the **`B`** key:
+- **Material Presets**: Mild Steel ($K \approx 0.44$), Stainless Steel ($K \approx 0.45$), Aluminum ($K \approx 0.40$), and Custom ($0.20 \le K \le 0.50$).
+- **Customizable Thickness & Radius**: Modify sheet thickness $T$ (mm) and inside bend radius $R$ (mm) with instant engineering feedback.
+- **Interactive Bend Line Tool (`B`)**: Click two points across a sheet metal contour to define a bend line with angle ($\alpha$, $1^\circ - 179^\circ$), inside radius ($R$), and direction (`UP` / `DOWN`).
+- **Precision Bend Compensation Engine**:
+  - Neutral Axis Radius: $R_n = R + K \cdot T$
+  - Bend Allowance: $BA = \frac{\pi}{180} \cdot \alpha \cdot (R + K \cdot T)$
+  - Outside Setback: $OSSB = \tan\left(\frac{\alpha}{2}\right) \cdot (R + T)$
+  - Bend Deduction: $BD = 2 \cdot OSSB - BA$
+- **Live Engineering Calculations HUD**: Real-time display of $BA$, $OSSB$, $BD$, and blank delta in ribbon and sidebar inspectors.
+- **Formed vs. Compensated Flat Blank View**: Toggle between formed dimensions (e.g., $50 \times 50\text{ mm}$ formed outer dimensions) and compensated flat pattern cutting blank length ($50 + 50 - BD = 96.524\text{ mm}$ for $T=2\text{ mm}$ Mild Steel).
+- **CNC Press Brake DXF Export**: Automatically outputs cutting perimeters on `PARTS` and bend lines on `BEND_UP` / `BEND_DOWN` layers with dashed linetypes and CNC press brake controller metadata (Trumpf TruTops, Bystronic BySoft, Amada VPSS).
 
 ---
 

@@ -14,9 +14,6 @@
   --text-bright: #ffffff;
   --text-dim: #7f848e;
   --selection-color: #00bfff;
-  --cam-leadin: #e5c07b;
-  --cam-rapid: #c678dd;
-  --cam-order: #61afef;
 }
 
 * {
@@ -316,7 +313,7 @@ aside.sidebar {
   word-break: break-all;
 }
 
-.cam-form-group {
+.cad-form-group {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -324,11 +321,11 @@ aside.sidebar {
   font-size: 12px;
 }
 
-.cam-form-group label {
+.cad-form-group label {
   color: var(--text-main);
 }
 
-.cam-form-group input, .cam-form-group select {
+.cad-form-group input, .cad-form-group select {
   background: #1a1c21;
   border: 1px solid var(--border-color);
   color: var(--text-bright);
@@ -901,3 +898,521 @@ canvas#part-preview-canvas {
   margin: 0;
   cursor: pointer;
 }
+
+/* ==========================================================================
+   SolidWorks Smart Dimension Mode Selector Popover Menu
+   ========================================================================== */
+.smart-dim-mode-menu {
+  position: absolute;
+  background: #1b2028;
+  border: 1.5px solid #00bfff;
+  border-radius: 8px;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.8), 0 0 16px rgba(0, 191, 255, 0.3);
+  padding: 6px;
+  z-index: 1060;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 250px;
+  color: var(--text-bright);
+  animation: popoverFadeIn 0.15s ease-out;
+}
+
+.dim-menu-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px 6px 8px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #00e5ff;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  margin-bottom: 3px;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+}
+
+.dim-menu-items {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.dim-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px;
+  background: #212630;
+  border: 1px solid #2e3644;
+  border-radius: 5px;
+  color: #c9d1d9;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.12s ease;
+}
+
+.dim-menu-item:hover {
+  background: #2a3342;
+  border-color: #388bfd;
+  color: #ffffff;
+  transform: translateX(2px);
+}
+
+.dim-menu-item.active {
+  background: #1f3d68;
+  border-color: #00bfff;
+  color: #ffffff;
+}
+
+.dim-menu-icon {
+  font-size: 15px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  background: rgba(0, 191, 255, 0.1);
+  border-radius: 4px;
+  border: 1px solid rgba(0, 191, 255, 0.2);
+}
+
+.dim-menu-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.dim-menu-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #ffffff;
+}
+
+.dim-menu-sub {
+  font-size: 10px;
+  color: #8b949e;
+}
+
+/* ==========================================================================
+   Sheet Metal Bend & Flat Blank Unfolding Styles
+   ========================================================================== */
+.sm-ribbon-group {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 3px;
+  padding: 2px 10px;
+}
+
+.ribbon-group-title {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-dim);
+  margin-bottom: 2px;
+}
+
+.sm-control-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+}
+
+.sm-control-row label {
+  color: var(--text-main);
+  white-space: nowrap;
+}
+
+.sm-select, .sm-input {
+  background: #1e2227;
+  border: 1px solid var(--border-color);
+  color: var(--text-bright);
+  border-radius: 3px;
+  padding: 3px 6px;
+  font-size: 11px;
+}
+
+.sm-select:focus, .sm-input:focus {
+  outline: none;
+  border-color: var(--accent-blue);
+}
+
+.sm-input {
+  width: 58px;
+  text-align: right;
+}
+
+.sm-unit {
+  color: var(--text-dim);
+  font-size: 10px;
+  margin-left: -2px;
+}
+
+.sm-vertical-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sm-quick-angles {
+  display: flex;
+  gap: 2px;
+  margin-left: 4px;
+}
+
+.sm-btn-mini {
+  background: #282c34;
+  border: 1px solid #3e4451;
+  color: var(--text-main);
+  border-radius: 3px;
+  padding: 2px 5px;
+  font-size: 10px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.sm-btn-mini:hover {
+  background: #3e4451;
+  color: #fff;
+  border-color: var(--accent-blue);
+}
+
+.sm-hud-group {
+  min-width: 260px;
+}
+
+.sm-hud-card {
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid #3b4252;
+  border-left: 3px solid #e040fb;
+  border-radius: 4px;
+  padding: 5px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.sm-hud-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+}
+
+.sm-hud-label {
+  color: var(--text-dim);
+  font-size: 10px;
+}
+
+.sm-hud-val {
+  font-family: Consolas, monospace;
+  font-weight: 600;
+  color: #39c5cf;
+}
+
+.sm-hud-val.highlight {
+  color: #f0abfc;
+}
+
+.btn-export-highlight {
+  background: linear-gradient(180deg, #285288, #1f3d68) !important;
+  border-color: #388bfd !important;
+  color: #ffffff !important;
+}
+
+.btn-export-highlight:hover {
+  background: linear-gradient(180deg, #3567a8, #264a7d) !important;
+}
+
+/* Sheet metal calculation inspector box */
+.sm-inspector-calc-box {
+  background: #1e2227;
+  border: 1px solid #3e4451;
+  border-radius: 4px;
+  padding: 8px;
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.sm-calc-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+}
+
+.sm-calc-title {
+  color: var(--text-dim);
+}
+
+.sm-calc-num {
+  font-family: Consolas, monospace;
+  font-weight: 700;
+  color: #39c5cf;
+}
+
+.sm-calc-num.magenta {
+  color: #e040fb;
+}
+
+.sm-dir-toggle {
+  display: flex;
+  gap: 4px;
+}
+
+.sm-dir-btn {
+  flex: 1;
+  padding: 4px;
+  background: #282c34;
+  border: 1px solid #3e4451;
+  color: var(--text-main);
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.sm-dir-btn.active.up {
+  background: #4a235a;
+  border-color: #e040fb;
+  color: #f0abfc;
+}
+
+.sm-dir-btn.active.down {
+  background: #5c3810;
+  border-color: #ff9800;
+  color: #ffb74d;
+}
+
+/* ==========================================================================
+   Automatic K-Factor Calculator & Calibration Modal
+   ========================================================================== */
+.badge-auto-k {
+  display: inline-block;
+  padding: 1px 5px;
+  background: rgba(56, 139, 253, 0.2);
+  color: #58a6ff;
+  border: 1px solid rgba(56, 139, 253, 0.4);
+  border-radius: 3px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.btn-kcalc-ribbon {
+  background: #21262d;
+  border: 1px solid #30363d;
+  color: #58a6ff;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 3px;
+  cursor: pointer;
+  margin-left: 4px;
+}
+.btn-kcalc-ribbon:hover {
+  background: #30363d;
+  border-color: #58a6ff;
+  color: #fff;
+}
+
+.kcalc-modal-window {
+  width: 760px;
+  max-width: 95vw;
+  height: 480px;
+  max-height: 90vh;
+}
+
+.kcalc-tabs {
+  display: flex;
+  background: #16181d;
+  border-bottom: 1px solid var(--border-color);
+  padding: 0 16px;
+  gap: 6px;
+}
+
+.kcalc-tab {
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-dim);
+  padding: 9px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.15s ease;
+}
+
+.kcalc-tab:hover {
+  color: var(--text-bright);
+}
+
+.kcalc-tab.active {
+  color: #58a6ff;
+  border-bottom-color: #58a6ff;
+  background: rgba(56, 139, 253, 0.08);
+}
+
+.kcalc-modal-content {
+  flex: 1;
+  padding: 16px 20px;
+  overflow-y: auto;
+  display: flex;
+}
+
+.kcalc-panel {
+  display: flex;
+  gap: 20px;
+  width: 100%;
+}
+
+.kcalc-form-col {
+  flex: 1.1;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.kcalc-result-col {
+  flex: 1.2;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: #1a1d23;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 14px;
+}
+
+.kcalc-section-title {
+  font-size: 12px;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: var(--text-dim);
+  letter-spacing: 0.5px;
+  margin: 0 0 4px 0;
+}
+
+.kcalc-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  gap: 8px;
+}
+
+.kcalc-row label {
+  color: var(--text-main);
+  white-space: nowrap;
+}
+
+.kcalc-input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.kcalc-input-wrap span {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.kcalc-input {
+  width: 80px;
+  background: #16181d;
+  border: 1px solid var(--border-color);
+  color: #fff;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-family: Consolas, monospace;
+  font-size: 12px;
+}
+.kcalc-input:focus {
+  border-color: #58a6ff;
+  outline: none;
+}
+
+.kcalc-select {
+  flex: 1;
+  max-width: 190px;
+  background: #16181d;
+  border: 1px solid var(--border-color);
+  color: #fff;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+}
+.kcalc-select:focus {
+  border-color: #58a6ff;
+  outline: none;
+}
+
+.kcalc-stat-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.kcalc-stat-box {
+  background: #21252b;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.kcalc-stat-box.highlight {
+  grid-column: span 2;
+  background: rgba(56, 139, 253, 0.12);
+  border-color: rgba(56, 139, 253, 0.4);
+}
+
+.kcalc-stat-label {
+  font-size: 10px;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  font-weight: 600;
+}
+
+.kcalc-stat-val {
+  font-family: Consolas, monospace;
+  font-size: 16px;
+  font-weight: 700;
+  color: #39c5cf;
+}
+.kcalc-stat-box.highlight .kcalc-stat-val {
+  font-size: 20px;
+  color: #58a6ff;
+}
+
+.kcalc-info-note {
+  font-size: 11px;
+  color: var(--text-dim);
+  line-height: 1.4;
+  background: rgba(0, 0, 0, 0.2);
+  padding: 8px 10px;
+  border-radius: 4px;
+  border-left: 2px solid var(--accent-blue);
+}
+
+.kcalc-status-banner {
+  padding: 8px 10px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  background: rgba(63, 185, 80, 0.15);
+  border: 1px solid rgba(63, 185, 80, 0.3);
+  color: #3fb950;
+}
+

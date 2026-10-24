@@ -15,24 +15,47 @@
   function toDXF(ents, layers = [], units = 'mm') {
     const out = [], w = (c, v) => { out.push(String(c)); out.push(String(v)); };
     const f = n => String(+Number(n).toFixed(6));
-    const used = new Set(ents.map(e => e.layer));
-    const lay = (layers && layers.length ? layers : [
+    const resolveLayer = e => e.type === 'bend' ? (e.layer || (e.direction === 'DOWN' ? 'BEND_DOWN' : 'BEND_UP')) : (e.layer || '0');
+    const used = new Set(ents.map(resolveLayer));
+    const layerDefs = (layers && layers.length ? layers : [
       { name: '0', aci: 7 },
       { name: 'PARTS', aci: 3 },
       { name: 'HOLES', aci: 4 },
-      { name: 'LEADS', aci: 2 }
-    ]).filter(l => used.has(l.name) || l.name === '0');
+      { name: 'LEADS', aci: 2 },
+      { name: 'BEND_UP', aci: 6 },
+      { name: 'BEND_DOWN', aci: 2 }
+    ]);
+    const layMap = new Map();
+    layerDefs.forEach(l => layMap.set(l.name, l.aci || 7));
+    if (!layMap.has('0')) layMap.set('0', 7);
+    if (!layMap.has('PARTS')) layMap.set('PARTS', 3);
+    if (!layMap.has('BEND_UP')) layMap.set('BEND_UP', 6);
+    if (!layMap.has('BEND_DOWN')) layMap.set('BEND_DOWN', 2);
+    used.forEach(name => { if (name && !layMap.has(name)) layMap.set(name, 7); });
+    const lay = Array.from(layMap.entries())
+      .filter(([name]) => used.has(name) || name === '0')
+      .map(([name, aci]) => ({ name, aci }));
+
     w(0, 'SECTION'); w(2, 'HEADER');
     w(9, '$ACADVER'); w(1, 'AC1009');
     w(9, '$INSUNITS'); w(70, units === 'in' ? 1 : 4);
     w(9, '$MEASUREMENT'); w(70, units === 'in' ? 0 : 1);
     w(0, 'ENDSEC');
     w(0, 'SECTION'); w(2, 'TABLES');
-    w(0, 'TABLE'); w(2, 'LTYPE'); w(70, 1);
+    w(0, 'TABLE'); w(2, 'APPID'); w(70, 2);
+    w(0, 'APPID'); w(2, 'ACAD'); w(70, 0);
+    w(0, 'APPID'); w(2, 'BEND'); w(70, 0);
+    w(0, 'ENDTAB');
+    w(0, 'TABLE'); w(2, 'LTYPE'); w(70, 3);
     w(0, 'LTYPE'); w(2, 'CONTINUOUS'); w(70, 0); w(3, 'Solid line'); w(72, 65); w(73, 0); w(40, 0);
+    w(0, 'LTYPE'); w(2, 'DASHED'); w(70, 0); w(3, 'Dashed __ __ __'); w(72, 65); w(73, 2); w(40, 10.0); w(49, 7.0); w(49, -3.0);
+    w(0, 'LTYPE'); w(2, 'CENTER'); w(70, 0); w(3, 'Center ____ _ ____'); w(72, 65); w(73, 4); w(40, 20.0); w(49, 12.0); w(49, -2.0); w(49, 2.0); w(49, -2.0);
     w(0, 'ENDTAB');
     w(0, 'TABLE'); w(2, 'LAYER'); w(70, lay.length);
-    lay.forEach(l => { w(0, 'LAYER'); w(2, l.name); w(70, 0); w(62, l.aci); w(6, 'CONTINUOUS'); });
+    lay.forEach(l => {
+      const ltype = (l.name && l.name.startsWith('BEND')) ? 'DASHED' : 'CONTINUOUS';
+      w(0, 'LAYER'); w(2, l.name); w(70, 0); w(62, l.aci); w(6, ltype);
+    });
     w(0, 'ENDTAB');
     w(0, 'ENDSEC');
     w(0, 'SECTION'); w(2, 'BLOCKS'); w(0, 'ENDSEC');
@@ -40,16 +63,33 @@
     for (const e of ents) {
       switch (e.type) {
         case 'line':
-          w(0, 'LINE'); w(8, e.layer); w(10, f(e.x1)); w(20, f(e.y1)); w(30, 0); w(11, f(e.x2)); w(21, f(e.y2)); w(31, 0); break;
+          w(0, 'LINE'); w(8, e.layer || '0'); w(10, f(e.x1)); w(20, f(e.y1)); w(30, 0); w(11, f(e.x2)); w(21, f(e.y2)); w(31, 0); break;
+        case 'bend': {
+          const bLay = e.layer || (e.direction === 'DOWN' ? 'BEND_DOWN' : 'BEND_UP');
+          w(0, 'LINE'); w(8, bLay); w(6, 'DASHED');
+          w(10, f(e.x1)); w(20, f(e.y1)); w(30, 0);
+          w(11, f(e.x2)); w(21, f(e.y2)); w(31, 0);
+          const angle = e.angle != null ? e.angle : 90;
+          const radius = e.radius != null ? e.radius : 2.0;
+          const dir = e.direction || (bLay.includes('DOWN') ? 'DOWN' : 'UP');
+          const ba = e.ba != null ? e.ba : 0;
+          const bd = e.bd != null ? e.bd : 0;
+          const tVal = e.thickness != null ? f(e.thickness) : '';
+          const kVal = e.kFactor != null ? f(e.kFactor) : '';
+          const extra = (tVal ? `;THICK=${tVal}` : '') + (kVal ? `;K=${kVal}` : '');
+          w(1001, 'BEND');
+          w(1000, `DIR=${dir};ANGLE=${angle};RADIUS=${radius}${extra};BA=${f(ba)};BD=${f(bd)}`);
+          break;
+        }
         case 'circle':
-          w(0, 'CIRCLE'); w(8, e.layer); w(10, f(e.cx)); w(20, f(e.cy)); w(30, 0); w(40, f(e.r)); break;
+          w(0, 'CIRCLE'); w(8, e.layer || '0'); w(10, f(e.cx)); w(20, f(e.cy)); w(30, 0); w(40, f(e.r)); break;
         case 'arc':
-          w(0, 'ARC'); w(8, e.layer); w(10, f(e.cx)); w(20, f(e.cy)); w(30, 0); w(40, f(e.r));
+          w(0, 'ARC'); w(8, e.layer || '0'); w(10, f(e.cx)); w(20, f(e.cy)); w(30, 0); w(40, f(e.r));
           w(50, f(norm(e.a1) / D2R)); w(51, f(norm(e.a2) / D2R)); break;
         case 'poly':
-          w(0, 'POLYLINE'); w(8, e.layer); w(66, 1); w(10, 0); w(20, 0); w(30, 0); w(70, e.closed ? 1 : 0);
-          e.pts.forEach(p => { w(0, 'VERTEX'); w(8, e.layer); w(10, f(p.x)); w(20, f(p.y)); w(30, 0); if (p.b) w(42, f(p.b)); });
-          w(0, 'SEQEND'); w(8, e.layer); break;
+          w(0, 'POLYLINE'); w(8, e.layer || '0'); w(66, 1); w(10, 0); w(20, 0); w(30, 0); w(70, e.closed ? 1 : 0);
+          e.pts.forEach(p => { w(0, 'VERTEX'); w(8, e.layer || '0'); w(10, f(p.x)); w(20, f(p.y)); w(30, 0); if (p.b) w(42, f(p.b)); });
+          w(0, 'SEQEND'); w(8, e.layer || '0'); break;
       }
     }
     w(0, 'ENDSEC'); w(0, 'EOF');
@@ -88,13 +128,38 @@
       if (verts.length < 2) return;
       ents.push({ type: 'poly', layer, closed, pts: verts.map(v => ({ x: v.x, y: v.y, b: v.b || 0 })) });
     };
+    const extractBend = (layer, xdataStr, x1, y1, x2, y2) => {
+      let angle = 90, radius = 2.0, dir = layer.toUpperCase().includes('DOWN') ? 'DOWN' : 'UP';
+      let ba = 0, bd = 0, thickness = null, kFactor = null;
+      if (xdataStr) {
+        const mAng = xdataStr.match(/\bANGLE\s*[:=]\s*([\d.]+)/i); if (mAng) angle = parseFloat(mAng[1]);
+        const mRad = xdataStr.match(/\bRADIUS\s*[:=]\s*([\d.]+)/i); if (mRad) radius = parseFloat(mRad[1]);
+        const mDir = xdataStr.match(/\bDIR\s*[:=]\s*(UP|DOWN)/i); if (mDir) dir = mDir[1].toUpperCase();
+        const mBa = xdataStr.match(/\bBA\s*[:=]\s*([\d.-]+)/i); if (mBa) ba = parseFloat(mBa[1]);
+        const mBd = xdataStr.match(/\bBD\s*[:=]\s*([\d.-]+)/i); if (mBd) bd = parseFloat(mBd[1]);
+        const mThick = xdataStr.match(/\bTHICK(?:NESS)?\s*[:=]\s*([\d.]+)/i); if (mThick) thickness = parseFloat(mThick[1]);
+        const mK = xdataStr.match(/\bK(?:FACTOR)?\s*[:=]\s*([\d.]+)/i); if (mK) kFactor = parseFloat(mK[1]);
+      }
+      const bendEnt = { type: 'bend', layer, direction: dir, angle, radius, ba, bd, x1, y1, x2, y2 };
+      if (thickness != null) bendEnt.thickness = thickness;
+      if (kFactor != null) bendEnt.kFactor = kFactor;
+      return bendEnt;
+    };
     for (let i = 0; i < recs.length; i++) {
       const r = recs[i];
       const get = (c, def = 0) => { const p = r.d.find(q => q[0] === c); return p ? parseFloat(p[1]) : def; };
       const str = (c, def = '') => { const p = r.d.find(q => q[0] === c); return p ? p[1] : def; };
       const layer = str(8, '0');
       switch (r.type) {
-        case 'LINE': ents.push({ type: 'line', layer, x1: get(10), y1: get(20), x2: get(11), y2: get(21) }); break;
+        case 'LINE': {
+          const isBend = layer.toUpperCase().includes('BEND') || str(1001, '') === 'BEND' || str(1000, '').includes('DIR=');
+          if (isBend) {
+            ents.push(extractBend(layer, str(1000, ''), get(10), get(20), get(11), get(21)));
+          } else {
+            ents.push({ type: 'line', layer, x1: get(10), y1: get(20), x2: get(11), y2: get(21) });
+          }
+          break;
+        }
         case 'CIRCLE': ents.push({ type: 'circle', layer, cx: get(10), cy: get(20), r: get(40) }); break;
         case 'ARC': ents.push({ type: 'arc', layer, cx: get(10), cy: get(20), r: get(40), a1: get(50) * D2R, a2: get(51) * D2R }); break;
         case 'LWPOLYLINE': {
@@ -104,6 +169,11 @@
             else if (c === 20 && v.length) v[v.length - 1].y = parseFloat(s);
             else if (c === 42 && v.length) v[v.length - 1].b = parseFloat(s);
           });
+          const isBend = layer.toUpperCase().includes('BEND') || str(1001, '') === 'BEND' || str(1000, '').includes('DIR=');
+          if (isBend && v.length === 2) {
+            ents.push(extractBend(layer, str(1000, ''), v[0].x, v[0].y, v[1].x, v[1].y));
+            break;
+          }
           addPoly(v, (get(70) & 1) === 1, layer); break;
         }
         case 'POLYLINE': {
@@ -113,6 +183,11 @@
             v.push({ x: g(10), y: g(20), b: g(42) }); j++;
           }
           i = (recs[j] && recs[j].type === 'SEQEND') ? j : j - 1;
+          const isBend = layer.toUpperCase().includes('BEND') || str(1001, '') === 'BEND' || str(1000, '').includes('DIR=');
+          if (isBend && v.length === 2) {
+            ents.push(extractBend(layer, str(1000, ''), v[0].x, v[0].y, v[1].x, v[1].y));
+            break;
+          }
           if (flags & (16 | 64)) skipped.POLYLINE = (skipped.POLYLINE || 0) + 1; else addPoly(v, (flags & 1) === 1, layer);
           break;
         }
@@ -198,5 +273,5 @@
     return { ents, layers, skipped, units };
   }
 
-  return { toDXF, parseDXF };
+  return { toDXF, parseDXF, fromDXF: parseDXF };
 });

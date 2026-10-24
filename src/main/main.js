@@ -10,7 +10,7 @@ function createWindow() {
     height: 900,
     minWidth: 1000,
     minHeight: 650,
-    title: 'IGEMS CAD/CAM DXF Studio',
+    title: 'DXF Studio - 2D CAD & Sheet Metal',
     backgroundColor: '#1b1d22',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -20,7 +20,30 @@ function createWindow() {
     }
   });
 
-  mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'));
+  const isDev = (process.env.NODE_ENV === 'development' || !app.isPackaged) && process.env.NODE_ENV !== 'production';
+  const devServerUrl = 'http://localhost:5173';
+  const prodFilePath = path.join(__dirname, '../../dist/renderer/index.html');
+
+  if (isDev) {
+    let retries = 0;
+    const maxRetries = 20;
+    const connectDevServer = () => {
+      mainWindow.loadURL(devServerUrl).catch((err) => {
+        retries++;
+        if (retries < maxRetries) {
+          setTimeout(connectDevServer, 300);
+        } else if (fs.existsSync(prodFilePath)) {
+          console.warn('[main] Vite dev server unreachable, falling back to compiled dist:', prodFilePath);
+          mainWindow.loadFile(prodFilePath);
+        } else {
+          console.error('[main] Failed to connect to dev server and no compiled dist found:', err);
+        }
+      });
+    };
+    connectDevServer();
+  } else {
+    mainWindow.loadFile(prodFilePath);
+  }
 
   mainWindow.on('closed', () => {
     mainWindow = null;

@@ -1,44 +1,51 @@
 {
   "name": "igems-dxf-cad-cam",
   "version": "1.0.0",
-  "description": "Desktop 2D CAD/CAM Drawing and DXF Export Application with IGEMS-style Waterjet/Laser features",
+  "description": "Desktop 2D CAD Drawing and DXF Export Application with Sheet Metal Bend Calculation",
   "main": "src/main/main.js",
   "author": "CAD/CAM Studio",
   "license": "MIT",
   "scripts": {
+    "test": "node test/test_sheetmetal.js && node test/test_kfactor_auto.js && node test/test_ui_integration.js && node test/test_modular_architecture.mjs && node test/test_smart_dim_advanced.mjs",
+    "dev": "concurrently -k \"vite\" \"electron .\"",
+    "build": "vite build",
     "start": "electron .",
-    "pack": "electron-builder --dir",
-    "dist": "electron-builder",
-    "dist:portable": "electron-builder --win portable"
+    "pack": "npm run build && electron-builder --dir",
+    "dist": "npm run build && electron-builder",
+    "dist:portable": "npm run build && electron-builder --win portable"
   },
   "devDependencies": {
+    "concurrently": "^9.2.5",
     "electron": "^33.2.0",
-    "electron-builder": "^25.1.8"
+    "electron-builder": "^25.1.8",
+    "vite": "^6.4.5"
   },
   "build": {
     "appId": "com.cadcam.igemsdxf",
     "productName": "IGEMS DXF Studio",
     "directories": {
-      "output": "dist"
+      "output": "release"
     },
     "files": [
-      "src/**/*",
+      "src/main/**/*",
+      "dist/renderer/**/*",
       "package.json"
     ],
     "win": {
       "target": [
-        {
-          "target": "nsis",
-          "arch": [
-            "x64"
-          ]
-        },
-        {
-          "target": "portable",
-          "arch": [
-            "x64"
-          ]
-        }
+        "nsis",
+        "portable"
+      ]
+    },
+    "mac": {
+      "target": [
+        "dmg",
+        "zip"
+      ]
+    },
+    "linux": {
+      "target": [
+        "AppImage"
       ]
     },
     "nsis": {
